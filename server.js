@@ -22,7 +22,7 @@ const pool = new Pool({
 
 async function initDb() {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS clientes (
+    CREATE TABLE IF NOT EXISTS pequeland_clientes (
       id TEXT PRIMARY KEY,
       nombre TEXT NOT NULL,
       celular TEXT NOT NULL,
@@ -30,7 +30,7 @@ async function initDb() {
       premios_canjeados INTEGER NOT NULL DEFAULT 0,
       creado TIMESTAMP NOT NULL DEFAULT NOW()
     );
-    CREATE TABLE IF NOT EXISTS visitas_log (
+    CREATE TABLE IF NOT EXISTS pequeland_visitas_log (
       id SERIAL PRIMARY KEY,
       cliente_id TEXT NOT NULL,
       fecha TIMESTAMP NOT NULL DEFAULT NOW()
@@ -58,19 +58,19 @@ app.post('/api/clientes', async (req, res) => {
   const { nombre, celular } = req.body;
   if (!nombre || !celular) return res.status(400).json({ error: 'Falta nombre o celular' });
 
-  const existing = await pool.query('SELECT id FROM clientes WHERE celular = $1', [celular]);
+  const existing = await pool.query('SELECT id FROM pequeland_clientes WHERE celular = $1', [celular]);
   if (existing.rows.length > 0) {
     return res.json({ id: existing.rows[0].id, existente: true });
   }
 
   const id = crypto.randomBytes(6).toString('hex');
-  await pool.query('INSERT INTO clientes (id, nombre, celular) VALUES ($1, $2, $3)', [id, nombre, celular]);
+  await pool.query('INSERT INTO pequeland_clientes(id, nombre, celular) VALUES ($1, $2, $3)', [id, nombre, celular]);
   res.json({ id, existente: false });
 });
 
 // Datos de un cliente
 app.get('/api/clientes/:id', async (req, res) => {
-  const result = await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
+  const result = await pool.query('SELECT * FROM pequeland_clientes WHERE id = $1', [req.params.id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
   const cliente = result.rows[0];
   const enCiclo = cliente.visitas % VISITS_FOR_PRIZE;
@@ -90,7 +90,7 @@ app.get('/api/clientes/:id/qr', async (req, res) => {
 
 // Generar tarjeta PDF
 app.get('/api/clientes/:id/tarjeta-pdf', async (req, res) => {
-  const result = await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
+  const result = await pool.query('SELECT * FROM pequeland_clientes WHERE id = $1', [req.params.id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
   const cliente = result.rows[0];
 
@@ -116,34 +116,34 @@ app.get('/api/clientes/:id/tarjeta-pdf', async (req, res) => {
 
 // Staff: sumar una visita
 app.post('/api/visitas/:id', requireStaff, async (req, res) => {
-  const result = await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
+  const result = await pool.query('SELECT * FROM pequeland_clientes WHERE id = $1', [req.params.id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
 
-  await pool.query('UPDATE clientes SET visitas = visitas + 1 WHERE id = $1', [req.params.id]);
-  await pool.query('INSERT INTO visitas_log (cliente_id) VALUES ($1)', [req.params.id]);
+  await pool.query('UPDATE pequeland_clientes SET visitas = visitas + 1 WHERE id = $1', [req.params.id]);
+  await pool.query('INSERT INTO pequeland_visitas_log (cliente_id) VALUES ($1)', [req.params.id]);
 
-  const actualizado = (await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id])).rows[0];
+  const actualizado = (await pool.query('SELECT * FROM pequeland_clientes WHERE id = $1', [req.params.id])).rows[0];
   const ganoPremio = actualizado.visitas % VISITS_FOR_PRIZE === 0;
   res.json({ ...actualizado, ganoPremio, visitasParaPremio: VISITS_FOR_PRIZE });
 });
 
 // Staff: canjear premio
 app.post('/api/canjear/:id', requireStaff, async (req, res) => {
-  const result = await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
+  const result = await pool.query('SELECT * FROM pequeland_clientes WHERE id = $1', [req.params.id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
 
-  await pool.query('UPDATE clientes SET premios_canjeados = premios_canjeados + 1 WHERE id = $1', [req.params.id]);
-  const actualizado = (await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id])).rows[0];
+  await pool.query('UPDATE pequeland_clientes SET premios_canjeados = premios_canjeados + 1 WHERE id = $1', [req.params.id]);
+  const actualizado = (await pool.query('SELECT * FROM pequeland_clientes WHERE id = $1', [req.params.id])).rows[0];
   res.json(actualizado);
 });
 
 // Staff: estadísticas generales
 app.post('/api/stats', requireStaff, async (req, res) => {
-  const totalClientes = parseInt((await pool.query('SELECT COUNT(*) as n FROM clientes')).rows[0].n);
-  const totalVisitas = parseInt((await pool.query('SELECT COALESCE(SUM(visitas),0) as n FROM clientes')).rows[0].n);
-  const totalPremios = parseInt((await pool.query('SELECT COALESCE(SUM(premios_canjeados),0) as n FROM clientes')).rows[0].n);
+  const totalClientes = parseInt((await pool.query('SELECT COUNT(*) as n FROM pequeland_clientes')).rows[0].n);
+  const totalVisitas = parseInt((await pool.query('SELECT COALESCE(SUM(visitas),0) as n FROM pequeland_clientes')).rows[0].n);
+  const totalPremios = parseInt((await pool.query('SELECT COALESCE(SUM(premios_canjeados),0) as n FROM pequeland_clientes')).rows[0].n);
   const recientes = (await pool.query(
-    'SELECT nombre, celular, visitas, premios_canjeados, creado FROM clientes ORDER BY creado DESC LIMIT 10'
+    'SELECT nombre, celular, visitas, premios_canjeados, creado FROM pequeland_clientes ORDER BY creado DESC LIMIT 10'
   )).rows;
   res.json({ totalClientes, totalVisitas, totalPremios, recientes });
 });
